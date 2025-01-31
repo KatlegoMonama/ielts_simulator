@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IELTS Speaking Test Simulator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:disabled {
+            background-color: #ccc;
+        }
+        .feedback {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>IELTS Speaking Test Simulator</h1>
+        <button id="recordBtn">Start Recording</button>
+        <div class="feedback" id="feedback"></div>
+    </div>
+
+    <script>
+
+
+        const recordBtn = document.getElementById("recordBtn");
+        const feedbackDiv = document.getElementById("feedback");
+
+        let mediaRecorder;
+        let audioChunks = [];
+
+        // Start recording
+        recordBtn.addEventListener("click", async () => {
+            if (mediaRecorder && mediaRecorder.state === "recording") {
+                mediaRecorder.stop();
+                recordBtn.textContent = "Start Recording";
+            } else {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = (event) => audioChunks.push(event.data);
+                mediaRecorder.onstop = processAudio;
+                mediaRecorder.start();
+                recordBtn.textContent = "Stop Recording";
+            }
+        });
+
+        // Process recorded audio
+        async function processAudio() {
+            const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+            const formData = new FormData();
+            formData.append("audio", audioBlob, "recording.wav");
+
+            // Send audio to backend for transcription
+            const transcriptionResponse = await fetch("/transcribe", {
+                method: "POST",
+                body: formData,
+            });
+            const transcriptionData = await transcriptionResponse.json();
+            const transcript = transcriptionData.transcript;
+
+            // Evaluate transcription
+            const evaluationResponse = await fetch("/evaluate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ transcript }),
+            });
+            const evaluationData = await evaluationResponse.json();
+
+            // Display feedback
+            feedbackDiv.innerHTML = `
+                <h3>Feedback:</h3>
+                <p>${evaluationData.feedback}</p>
+                <h3>Scores:</h3>
+                <ul>
+                    <li>Fluency: ${evaluationData.scores.fluency.toFixed(2)}</li>
+                    <li>Vocabulary: ${evaluationData.scores.vocabulary.toFixed(2)}</li>
+                    <li>Grammar: ${evaluationData.scores.grammar.toFixed(2)}</li>
+                    <li>Overall: ${evaluationData.scores.overall.toFixed(2)}</li>
+                </ul>
+            `;
+        }
+        
+    </script>
+</body>
+</html>
